@@ -1,52 +1,77 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import admin from "firebase-admin";
+import type { NextApiRequest, NextApiResponse } from 'next';
+import admin from 'firebase-admin';
+import { initializeApp, applicationDefault, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string);
+  initializeApp({
+    credential: cert(serviceAccount),
   });
 }
 
+const db = getFirestore();
+
 interface AuthedRequest extends NextApiRequest {
-  user?: { uid: string };
+  user?: { uid: string; email: string };
 }
 
-const buildsMap = new Map<string, { count: number }>();
+const inMemoryRateLimit = new Map<string, { count: number; timestamp: number }>();
 
-export default async function trackBuilds(
-  req: AuthedRequest,
-  res: NextApiResponse
-) {
-  try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ message: "Method not allowed" });
-    }
+async function rateLimiter(ip: string) {
+  const limit = 10; // requests
+  const windowMs = 60 * 1000; // 1 minute
 
-    if (!req.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+  const currentTime = Date.now();
+  const requestInfo = inMemoryRateLimit.get(ip);
 
-    const { buildId } = req.body;
+  if (requestInfo) {
+    const { count, timestamp } = requestInfo;
 
-    if (!buildId) {
-      return res.status(400).json({ message: "Build ID is required" });
-    }
+    if (currentTime - timestamp < windowMs) {
+      if (count >= limit) {
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
 
-    if (buildsMap.has(buildId)) {
-      buildsMap.get(buildId)!.count += 1;
+      inMemoryRateLimit.set(ip, { count: count + 1, timestamp });
     } else {
-      buildsMap.set(buildId, { count: 1 });
+      inMemoryRateLimit.set(ip, { count: 1, timestamp: currentTime });
+    }
+  } else {
+    inMemoryRateLimit.set(ip, { count: 1, timestamp: currentTime });
+  }
+}
+
+export default async function handler(req: AuthedRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+
+  const { user } = req;
+  const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+
+  try {
+    await rateLimiter(ip as string);
+
+    const { buildId, memoryUsage, routingErrors, performanceMetrics } = req.body;
+
+    if (!buildId || !user) {
+      return res.status(400).json({ message: 'Invalid request data' });
     }
 
-    await admin.firestore().collection("builds").add({
-      userId: req.user.uid,
+    const buildData = {
       buildId,
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-    });
+      userId: user.uid,
+      memoryUsage,
+      routingErrors,
+      performanceMetrics,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
 
-    return res.status(200).json({ message: "Build tracked successfully" });
+    await db.collection('builds').add(buildData);
+
+    res.status(201).json({ message: 'Build tracked successfully' });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ message: err instanceof Error ? err.message : String(err) });
   }
 }
