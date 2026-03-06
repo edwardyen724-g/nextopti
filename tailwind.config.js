@@ -1,25 +1,23 @@
-const { fontFamily } = require('tailwindcss/defaultTheme');
+const withMT = require("@material-tailwind/react/utils/withMT");
 
-module.exports = {
+module.exports = withMT({
   content: [
-    './src/app/**/*.{js,ts,jsx,tsx}',
-    './src/components/**/*.{js,ts,jsx,tsx}',
-    './src/pages/**/*.{js,ts,jsx,tsx}',
+    "./app/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./pages/**/*.{js,ts,jsx,tsx}",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
       colors: {
-        primary: '#3B82F6', // Example color, customize as needed
-        secondary: '#FBBF24', // Example color, customize as needed
+        primary: '#4F46E5',
+        secondary: '#6B7280',
+        accent: '#D946EF',
       },
       fontFamily: {
-        sans: ['Inter', ...fontFamily.sans],
+        sans: ['Inter', 'sans-serif'],
       },
     },
   },
-  plugins: [
-    require('@tailwindcss/forms'),
-    require('@tailwindcss/typography'),
-    require('@tailwindcss/aspect-ratio'),
-  ],
-};
+  plugins: [],
+});
