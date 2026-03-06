@@ -1,47 +1,63 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuth } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabaseClient';
-import { RateLimiterMemory } from 'rate-limiter-flexible';
+import { initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { rateLimit } from '../../../lib/rateLimit'; // Assume you have a utility for rate limiting
 
-interface AuthedRequest extends NextApiRequest {
-  user?: { id: string; email: string };
-}
-
-const limiter = new RateLimiterMemory({
-  points: 10, // 10 requests
-  duration: 1, // per second
+initializeApp({
+  credential: {
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'), 
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+  },
 });
 
-const validateRoute = async (req: AuthedRequest, res: NextApiResponse) => {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method Not Allowed' });
+interface AuthedRequest extends NextApiRequest {
+  uid?: string;
+}
+
+const limiter = new Map<string, { count: number; timestamp: number }>();
+
+async function validateRoute(req: AuthedRequest, res: NextApiResponse) {
+  const now = Date.now();
+  const rateLimitKey = req.headers['x-real-ip'] || req.connection.remoteAddress;
+
+  if (!rateLimitKey || limiter.get(rateLimitKey as string)?.count > 10) {
+    return res.status(429).json({ message: 'Too many requests, please try again later.' });
   }
 
   try {
-    await limiter.consume(req.ip);
+    const { token } = req.body;
 
-    const { route } = req.body;
+    // Verify the token and extract UID
+    const decodedToken = await getAuth().verifyIdToken(token);
+    req.uid = decodedToken.uid;
 
-    if (!route || typeof route !== 'string') {
-      return res.status(400).json({ message: 'Invalid route provided.' });
+    // At this point, you would implement the route validation logic
+    const validationResult = checkRouteValidity(req.body.route); // Assume this is your route validation logic
+
+    // Rate limiting logic
+    const currentLimit = limiter.get(rateLimitKey as string) || { count: 0, timestamp: now };
+    limiter.set(rateLimitKey as string, {
+      count: currentLimit.count + 1,
+      timestamp: currentLimit.timestamp,
+    });
+
+    return res.status(200).json({ valid: validationResult });
+  } catch (err) {
+    return res.status(500).json({ message: err instanceof Error ? err.message : String(err) });
+  } finally {
+    // Clean up old entries in rate limit
+    for (const [key, value] of limiter.entries()) {
+      if (now - value.timestamp > 60000) { // 1 minute expiry
+        limiter.delete(key);
+      }
     }
-
-    // Here you would add logic to validate the route (this is a placeholder)
-    const isValidRoute = true; // Simplified validation logic
-
-    return res.status(200).json({ valid: isValidRoute });
-  } catch (error) {
-    return res.status(500).json({ message: error instanceof Error ? error.message : String(error) });
   }
-};
+}
 
-export default async (req: AuthedRequest, res: NextApiResponse) => {
-  const { user } = await getAuth(req); // Assuming getAuth() sets user
+function checkRouteValidity(route: string) {
+  // Mock validation logic; implement your real validation here
+  return route.startsWith('/') && route.length < 255; 
+}
 
-  if (!user) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  req.user = user;
-  validateRoute(req, res);
-};
+export default validateRoute;
