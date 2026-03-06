@@ -1,20 +1,30 @@
-import { defineConfig } from 'next/config';
+import { defineConfig } from 'next';
+import { withPWA } from 'next-pwa';
 
-export default defineConfig({
+export default defineConfig(withPWA({
   reactStrictMode: true,
-  experimental: {
-    appDir: true,
+  pwa: {
+    dest: 'public',
+    register: true,
+    skipWaiting: true,
   },
   images: {
-    domains: ['your-image-domain.com'], // Replace with your allowed image domains
+    domains: ['your-image-domain.com'], // Replace with your image domain
   },
+  // Environment variables setup
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NEXT_PUBLIC_STRIPE_PUBLIC_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY,
   },
-  trailingSlash: true,
-  typescript: {
-    ignoreBuildErrors: true,
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/dashboard',
+        permanent: true,
+      },
+    ];
   },
-});
+  // Custom webpack configuration can be added here
+}));
