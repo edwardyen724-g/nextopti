@@ -1,8 +1,6 @@
 import React from 'react';
 import './globals.css';
 import { Inter } from 'next/font/google';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -17,16 +15,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.className}>
-      <body>
-        <Navbar />
-        <main className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
-          <h1 className="text-2xl font-bold text-center">Supercharge Your Next.js Development with NextOpti</h1>
-          <section className="mt-6 text-center">
-            {children}
-          </section>
+    <html lang="en">
+      <body className={inter.className}>
+        <header className="bg-gray-800 text-white p-4">
+          <h1 className="text-2xl font-bold">Supercharge Your Next.js Development with NextOpti</h1>
+          <p className="mt-2">{metadata.description}</p>
+        </header>
+        <main className="container mx-auto p-4">
+          {children}
         </main>
-        <Footer />
+        <footer className="bg-gray-800 text-white p-4 text-center">
+          <p>© {new Date().getFullYear()} NextOpti. All rights reserved.</p>
+        </footer>
       </body>
     </html>
   );
