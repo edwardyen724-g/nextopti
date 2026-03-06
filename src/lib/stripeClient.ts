@@ -1,10 +1,14 @@
 import { loadStripe } from '@stripe/stripe-js';
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+let stripePromise: Promise<ReturnType<typeof loadStripe>> | null = null;
 
 export const getStripe = () => {
   if (!stripePromise) {
-    throw new Error('Stripe promise not initialized');
+    const stripePublicKey = process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY;
+    if (!stripePublicKey) {
+      throw new Error('Missing Stripe public key in environment variables');
+    }
+    stripePromise = loadStripe(stripePublicKey);
   }
   return stripePromise;
 };
